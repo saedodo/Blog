@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>조경학 연구 노트 및 Q&A</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --card: #fff;
+      --accent: #007bff;
+      --hover: #0056b3;
+    }
+    .dark {
+      --bg: #181818;
+      --text: #eee;
+      --card: #242424;
+      --accent: #3399ff;
+      --hover: #77bbff;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.3s, color 0.3s;
+    }
+    .top-bar {
+      background: var(--accent);
+      color: white;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .top-bar nav button {
+      margin-left: 1rem;
+      background: white;
+      color: var(--accent);
+    }
+    .container {
+      padding: 2rem;
+      max-width: 1000px;
+      margin: auto;
+    }
+    .form-container, .post-list, .category-edit {
+      background: var(--card);
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+    }
+    label, input, textarea, select {
+      display: block;
+      width: 100%;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    input, textarea, select {
+      padding: 0.5rem;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-right: 0.5rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: var(--hover);
+    }
+    .post {
+      border-bottom: 1px solid #ccc;
+      padding: 1rem 0;
+    }
+    .post:last-child {
+      border-bottom: none;
+    }
+    .hidden {
+      display: none;
+    }
+    .search-box {
+      margin-bottom: 2rem;
+    }
+    .filter {
+      margin-bottom: 1rem;
+    }
+    .tag-list {
+      margin-bottom: 1rem;
+    }
+    .tag {
+      display: inline-block;
+      padding: 0.3rem 0.6rem;
+      margin: 0.2rem;
+      background: #ddd;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .tag:hover {
+      background: var(--hover);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div>조경학 연구노트</div>
+    <nav>
+      <button onclick="toggleForm()">새 글</button>
+      <button onclick="toggleCategoryEdit()">카테고리</button>
+      <button onclick="toggleDarkMode()">🌓</button>
+    </nav>
+  </div>
+  <div class="container">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="검색어 입력" oninput="renderPosts()" />
+      <select id="filterCategory" onchange="renderPosts()"></select>
+      <select id="sortOrder" onchange="renderPosts()">
+        <option value="desc">최신순</option>
+        <option value="asc">오래된순</option>
+      </select>
+    </div>
+    <div id="formContainer" class="form-container hidden">
+      <h2>글 작성</h2>
+      <form id="postForm">
+        <label for="title">제목</label>
+        <input id="title" required />
+        <label for="category">카테고리</label>
+        <select id="category"></select>
+        <label for="tags">태그 (쉼표로 구분)</label>
+        <input id="tags" placeholder="#도시,#기후,#식생" />
+        <label for="content">내용 (Markdown 지원)</label>
+        <textarea id="content" required></textarea>
+        <div>
+          <strong>미리보기:</strong>
+          <div id="preview" style="border:1px solid #ccc; padding:0.5rem; background:#fafafa;"></div>
+        </div>
+        <button type="submit">저장</button>
+        <button type="button" onclick="toggleForm()">취소</button>
+      </form>
+    </div>
+    <div id="categoryEdit" class="category-edit hidden">
+      <h2>카테고리 수정</h2>
+      <div id="categoryList"></div>
+      <input id="newCategory" placeholder="새 카테고리 이름" />
+      <button onclick="addCategory()">추가</button>
+    </div>
+    <div class="post-list" id="postList">
+      <h2>글 목록</h2>
+      <div class="tag-list" id="tagList"></div>
+      <div id="posts"></div>
+    </div>
+  </div>
+  <script>
+    const body = document.body;
+    const postForm = document.getElementById('postForm');
+    const categorySelect = document.getElementById('category');
+    const filterCategory = document.getElementById('filterCategory');
+    const preview = document.getElementById('preview');
+    const tagList = document.getElementById('tagList');
+    const postsContainer = document.getElementById('posts');
+    const sortOrder = document.getElementById('sortOrder');
+
+    let posts = JSON.parse(localStorage.getItem('landscapePosts')) || [];
+    let categories = JSON.parse(localStorage.getItem('landscapeCategories')) || ['학업 질문', 'SCI 논문', '실천 제안'];
+    let currentTagFilter = '';
+
+    document.getElementById('content').addEventListener('input', (e) => {
+      preview.innerHTML = marked.parse(e.target.value, { breaks: true });
+    });
+
+    function toggleForm() {
+      document.getElementById('formContainer').classList.toggle('hidden');
+      document.getElementById('categoryEdit').classList.add('hidden');
+      renderCategories();
+    }
+
+    function toggleCategoryEdit() {
+      document.getElementById('categoryEdit').classList.toggle('hidden');
+      document.getElementById('formContainer').classList.add('hidden');
+      renderCategoryEdit();
+    }
+
+    function toggleDarkMode() {
+      body.classList.toggle('dark');
+      localStorage.setItem('darkmode', body.classList.contains('dark'));
+    }
+
+    function renderCategories() {
+      categorySelect.innerHTML = '';
+      filterCategory.innerHTML = '<option value="">전체</option>';
+      categories.forEach(cat => {
+        const opt1 = document.createElement('option');
+        const opt2 = document.createElement('option');
+        opt1.value = opt2.value = cat;
+        opt1.textContent = opt2.textContent = cat;
+        categorySelect.appendChild(opt1);
+        filterCategory.appendChild(opt2);
+      });
+    }
+
+    function renderCategoryEdit() {
+      const list = document.getElementById('categoryList');
+      list.innerHTML = '';
+      categories.forEach((cat, index) => {
+        const div = document.createElement('div');
+        div.innerHTML = `${cat} <button onclick="deleteCategory(${index})">삭제</button>`;
+        list.appendChild(div);
+      });
+    }
+
+    function addCategory() {
+      const name = document.getElementById('newCategory').value.trim();
+      if (name && !categories.includes(name)) {
+        categories.push(name);
+        localStorage.setItem('landscapeCategories', JSON.stringify(categories));
+        renderCategories();
+        renderCategoryEdit();
+      }
+    }
+
+    function deleteCategory(index) {
+      categories.splice(index, 1);
+      localStorage.setItem('landscapeCategories', JSON.stringify(categories));
+      renderCategories();
+      renderCategoryEdit();
+    }
+
+    function renderTags() {
+      const tags = [...new Set(posts.flatMap(p => (p.tags || [])))];
+      tagList.innerHTML = tags.map(tag => `<span class="tag" onclick="filterByTag('${tag}')">${tag}</span>`).join('');
+    }
+
+    function filterByTag(tag) {
+      currentTagFilter = tag;
+      renderPosts();
+    }
+
+    function renderPosts() {
+      postsContainer.innerHTML = '';
+      const keyword = document.getElementById('searchInput').value.toLowerCase();
+      const filter = filterCategory.value;
+      const sorted = [...posts].sort((a, b) => sortOrder.value === 'asc' ? new Date(a.date) - new Date(b.date) : new Date(b.date) - new Date(a.date));
+      const filtered = sorted.filter(post =>
+        (!filter || post.category === filter) &&
+        (!currentTagFilter || (post.tags || []).includes(currentTagFilter)) &&
+        (post.title.toLowerCase().includes(keyword) || post.content.toLowerCase().includes(keyword))
+      );
+      if (filtered.length === 0) {
+        postsContainer.innerHTML = '<p>검색 결과가 없습니다.</p>';
+        return;
+      }
+      filtered.forEach((post, index) => {
+        const div = document.createElement('div');
+        div.className = 'post';
+        div.innerHTML = `
+          <strong>${post.title}</strong>
+          <br><em>${post.category}</em>
+          <div>${marked.parse(post.content, { breaks: true })}</div>
+          <small>${post.date}</small>
+          <br>
+          ${post.tags?.map(t => `<span class='tag' onclick="filterByTag('${t}')">${t}</span>`).join(' ')}
+          <br><button onclick="editPost(${index})">수정</button>
+          <button onclick="deletePost(${index})">삭제</button>`;
+        postsContainer.appendChild(div);
+      });
+    }
+
+    function editPost(index) {
+      const post = posts[index];
+      document.getElementById('title').value = post.title;
+      document.getElementById('content').value = post.content;
+      document.getElementById('tags').value = post.tags?.join(',') || '';
+      categorySelect.value = post.category;
+      posts.splice(index, 1);
+      renderPosts();
+      toggleForm();
+    }
+
+    function deletePost(index) {
+      posts.splice(index, 1);
+      localStorage.setItem('landscapePosts', JSON.stringify(posts));
+      renderPosts();
+    }
+
+    postForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = document.getElementById('title').value;
+      const category = categorySelect.value;
+      const content = document.getElementById('content').value;
+      const tagStr = document.getElementById('tags').value;
+      const tags = tagStr.split(',').map(t => t.trim()).filter(t => t);
+      const date = new Date().toISOString();
+
+      posts.push({ title, category, content, tags, date });
+      localStorage.setItem('landscapePosts', JSON.stringify(posts));
+      renderTags();
+      renderPosts();
+      toggleForm();
+      postForm.reset();
+    });
+
+    renderCategories();
+    renderTags();
+    renderPosts();
+    if (localStorage.getItem('darkmode') === 'true') body.classList.add('dark');
+  </script>
+</body>
+</html>
